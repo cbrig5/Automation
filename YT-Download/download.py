@@ -50,10 +50,12 @@ def search(youtube, **kwargs):
 
 
 def get_user_id(youtube):
+    """Get the user's YouTube channel ID."""
     return youtube.channels().list(part="id", mine=True).execute()["items"][0]["id"]
 
 
 def get_playlist_id(youtube, channel_id, playlist_name):
+    """Get the playlist ID for a given playlist name."""
     for i in (
         youtube.playlists()
         .list(part="snippet", channelId=channel_id)
@@ -66,7 +68,18 @@ def get_playlist_id(youtube, channel_id, playlist_name):
     raise Exception(f"Cannot find playlist:{playlist_name}")
 
 
+def parse_url(url):
+    """Return a dict of the query parameters of a URL."""
+
+    # if url is for a short raise error
+    if "/short" in url:
+        raise Exception("URL's for shorts are not supported")
+
+    return p.parse_qs(p.urlsplit(url).query)["v"][0]
+
+
 def get_videos_from_playlist(youtube, playlist_id):
+    """Get all video ids in a playlist."""
     request = youtube.playlistItems().list(
         part="snippet", playlistId=playlist_id, maxResults=50
     )
@@ -81,7 +94,10 @@ def get_videos_from_playlist(youtube, playlist_id):
     return playlist_videos
 
 
-def get_video_from_id(youtube, video_id):
+def get_video_from_url(youtube, video_url):
+    """Gets video object from a video URL."""
+    video_id = parse_url(video_url)
+
     request = youtube.videos().list(part="snippet", id=video_id)
 
     response = request.execute()
@@ -89,18 +105,23 @@ def get_video_from_id(youtube, video_id):
     return response["items"]
 
 
-def get_video_details(videos, video_id):
+def get_video_details(videos, video_url):
+    """Get video details from a list of video objects."""
     video_information = {}
     sub_details = {}
 
     for video in videos:
-        video_id = video_id or video["snippet"]["resourceId"]["videoId"]
+        try:
+            video_id = video["snippet"]["resourceId"]["videoId"]
+        except KeyError:
+            video_id = video["id"]
+
         video_channel_title = video["snippet"].get(
             "VideoOwnerChannelTitle", video["snippet"]["channelTitle"]
         )
         video_title = video["snippet"]["title"]
         video_description = video["snippet"]["description"]
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        video_url = video_url or f"https://www.youtube.com/watch?v={video_id}"
 
         sub_details.update(
             {
@@ -120,6 +141,7 @@ def get_video_details(videos, video_id):
 
 
 def download_with_progress(stream, file_path):
+    """Download a video with a progress bar."""
     response = urlopen(stream.url)
     total_size = int(response.getheader("content-length"))
 
@@ -151,21 +173,21 @@ def main():
     else:
         channel_id = input("Enter the channel id: ")
 
-    video_id = None
+    video_url = None
 
     download_type = input(
         "Enter 1 to download a single video or 2 to download from a playlist : "
     )
     if download_type == "1":
-        video_id = input("Enter the video id: ")
-        video = get_video_from_id(youtube, video_id)
+        video_url = input("Enter the video url: ")
+        video = get_video_from_url(youtube, video_url)
 
     else:
         playlist_name = input("Enter the playlist name: ")
         playlist_id = get_playlist_id(youtube, channel_id, playlist_name)
         video = get_videos_from_playlist(youtube, playlist_id)
 
-    video_details = get_video_details(video, video_id)
+    video_details = get_video_details(video, video_url)
     print(video_details)
 
     # video_url = "https://www.youtube.com/watch?v=PJg_rnK7TFo"
