@@ -56,14 +56,23 @@ def get_user_id(youtube):
 
 def get_playlist_id(youtube, channel_id, playlist_name):
     """Get the playlist ID for a given playlist name."""
-    for i in (
-        youtube.playlists()
-        .list(part="snippet", channelId=channel_id)
-        .execute()
-        .get("items")
-    ):
-        if i["snippet"]["title"] == playlist_name:
-            return i["id"]
+    next_page_token = None
+    while True:
+        request = youtube.playlists().list(
+            part="snippet",
+            channelId=channel_id,
+            maxResults=50,
+            pageToken=next_page_token,
+        )
+        response = request.execute()
+
+        for playlist in response["items"]:
+            if playlist["snippet"]["title"] == playlist_name:
+                return playlist["id"]
+
+        next_page_token = response.get("nextPageToken")
+        if not next_page_token:
+            break
 
     raise Exception(f"Cannot find playlist:{playlist_name}")
 
@@ -105,7 +114,7 @@ def get_video_from_url(youtube, video_url):
     return response["items"]
 
 
-def get_video_details(videos, video_url):
+def get_video_details(videos, video_url, playlist_name):
     """Get video details from a list of video objects."""
     video_information = {}
     sub_details = {}
@@ -116,21 +125,21 @@ def get_video_details(videos, video_url):
         except KeyError:
             video_id = video["id"]
 
+        playlist_name = playlist_name
         video_channel_title = video["snippet"].get(
-            "VideoOwnerChannelTitle", video["snippet"]["channelTitle"]
+            "videoOwnerChannelTitle", video["snippet"]["channelTitle"]
         )
         video_title = video["snippet"]["title"]
         video_description = video["snippet"]["description"]
         video_url = video_url or f"https://www.youtube.com/watch?v={video_id}"
 
-        sub_details.update(
-            {
-                "video_channel_title": video_channel_title,
-                "video_title": video_title,
-                "video_description": video_description,
-                "video_url": video_url,
-            }
-        )
+        sub_details = {
+            "playlist_name": playlist_name,
+            "video_channel_title": video_channel_title,
+            "video_title": video_title,
+            "video_description": video_description,
+            "video_url": video_url,
+        }
 
         video_information[video_id] = sub_details
 
@@ -140,8 +149,20 @@ def get_video_details(videos, video_url):
         raise Exception("No videos found")
 
 
-def download_with_progress(stream, file_path):
+def check_path(path):
+    """Check if the path exists, if not create it."""
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
+def make_stream_obj(url):
+    """Return a stream object from a video URL."""
+    return YouTube(url).streams.get_highest_resolution()
+
+
+def download_with_progress(stream, channel_path, playlist_path):
     """Download a video with a progress bar."""
+
     response = urlopen(stream.url)
     total_size = int(response.getheader("content-length"))
 
@@ -153,54 +174,77 @@ def download_with_progress(stream, file_path):
         desc=stream.default_filename,
         ascii=True,
     ) as pbar:
-        with open(file_path, "wb") as file:
+        with open(channel_path, "wb") as file:
             chunk_size = 1024 * 256  # 256 KB chunks
             for chunk in iter(lambda: response.read(chunk_size), b""):
                 file.write(chunk)
                 pbar.update(len(chunk))
 
+        if playlist_path:
+            with open(playlist_path, "wb") as file:
+                chunk_size = 1024 * 256  # 256 KB chunks
+                for chunk in iter(lambda: response.read(chunk_size), b""):
+                    file.write(chunk)
+                    pbar.update(len(chunk))
+
+
+def download_video(video_details, path):
+    """Download videos."""
+    for video in video_details:
+        url = video_details[video]["video_url"]
+        title = video_details[video]["video_title"]
+        channel = video_details[video]["video_channel_title"]
+        channel_path = f"{path}/{channel}"
+        playlist = video_details[video]["playlist_name"]
+        playlist_path = f"{path}/{playlist}"
+
+        check_path(channel_path)
+
+        if playlist:
+            check_path(playlist_path)
+            playlist_path = f"{playlist_path}/{title}.mp4"
+        else:
+            playlist_path = None
+
+        stream = make_stream_obj(url)
+
+        download_with_progress(stream, f"{channel_path}/{title}.mp4", playlist_path)
+
 
 def main():
     youtube = youtube_authenticate()
 
-    # user choice to download from own channel or another channel
-    channel_type = input(
-        "Enter 1 to download from your own channel or 2 to download from another channel: "
-    )
-
-    if channel_type == "1":
-        channel_id = get_user_id(youtube)
-    else:
-        channel_id = input("Enter the channel id: ")
-
     video_url = None
 
     download_type = input(
-        "Enter 1 to download a single video or 2 to download from a playlist : "
+        "Enter 1 to download a single video or 2 to download from a playlist: "
     )
+
     if download_type == "1":
         video_url = input("Enter the video url: ")
         video = get_video_from_url(youtube, video_url)
+        playlist_name = None
 
     else:
+        # user choice to download from own channel or another channel
+        channel_type = input(
+            "Enter 1 to download from your own channel or 2 to download from another channel: "
+        )
+        if channel_type == "1":
+            channel_id = get_user_id(youtube)
+        else:
+            channel_id = input("Enter the channel id: ")
         playlist_name = input("Enter the playlist name: ")
         playlist_id = get_playlist_id(youtube, channel_id, playlist_name)
         video = get_videos_from_playlist(youtube, playlist_id)
 
-    video_details = get_video_details(video, video_url)
-    print(video_details)
+    video_details = get_video_details(video, video_url, playlist_name)
 
-    # video_url = "https://www.youtube.com/watch?v=PJg_rnK7TFo"
-    # video = YouTube(video_url)
-    # video_stream = video.streams.get_highest_resolution()
-
-    # title = video.title
-
-    # download_path = "./Downloads/Markiplier"
+    download_path = input("Enter the path to download the video: ")
 
     try:
         start_time = time.time()
-        # download_with_progress(video_stream, f"{download_path}/{title}.mp4")
+        download_video(video_details, download_path)
         end_time = time.time()
 
         total_time = end_time - start_time
