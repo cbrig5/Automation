@@ -164,3 +164,6 @@ Downloads/
 
 # ignore vscode
 .vscode
+
+# yotuube api credentials
+credentials.json
