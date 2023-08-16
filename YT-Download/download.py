@@ -183,11 +183,13 @@ def download_video_with_progress(args):
         unit_divisor=1024,
         desc=title,
         ascii=True,
-    ) as pbar, \
-         open(channel_path, "wb") as channel_file, \
-         (open(playlist_path, "wb") if playlist_path else None) as playlist_file:
+    ) as pbar:
+        with ExitStack() as stack:
+            channel_file = stack.enter_context(open(channel_path, "wb"))
+            playlist_file = stack.enter_context(open(playlist_path, "wb")) if playlist_path else None
 
-        with urlopen(stream.url) as response:
+            response = urlopen(stream.url)
+
             download_chunk(response, channel_file, playlist_file, pbar)
 
 
