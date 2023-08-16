@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
+import threading
 from pytube import YouTube
 import pytube.exceptions
 import time
@@ -7,7 +10,6 @@ from tqdm import tqdm
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-import requests
 
 import urllib.parse as p
 import re
@@ -160,55 +162,61 @@ def make_stream_obj(url):
     return YouTube(url).streams.get_highest_resolution()
 
 
-def download_with_progress(stream, channel_path, playlist_path):
-    """Download a video with a progress bar."""
+def download_chunk(response, channel_file, playlist_file, pbar):
+    chunk_size = 1024 * 256  # 256 KB chunks
+    for chunk in iter(lambda: response.read(chunk_size), b""):
+        channel_file.write(chunk)
+        if playlist_file:
+            playlist_file.write(chunk)
+        pbar.update(len(chunk))
 
-    response = urlopen(stream.url)
-    total_size = int(response.getheader("content-length"))
+
+def download_video_with_progress(args):
+    stream, channel_path, playlist_path, title = args
+
+    total_size = stream.filesize
 
     with tqdm(
         total=total_size,
         unit="B",
         unit_scale=True,
         unit_divisor=1024,
-        desc=stream.default_filename,
+        desc=title,
         ascii=True,
-    ) as pbar:
-        with open(channel_path, "wb") as file:
-            chunk_size = 1024 * 256  # 256 KB chunks
-            for chunk in iter(lambda: response.read(chunk_size), b""):
-                file.write(chunk)
-                pbar.update(len(chunk))
+    ) as pbar, \
+         open(channel_path, "wb") as channel_file, \
+         (open(playlist_path, "wb") if playlist_path else None) as playlist_file:
 
-        if playlist_path:
-            with open(playlist_path, "wb") as file:
-                chunk_size = 1024 * 256  # 256 KB chunks
-                for chunk in iter(lambda: response.read(chunk_size), b""):
-                    file.write(chunk)
-                    pbar.update(len(chunk))
+        with urlopen(stream.url) as response:
+            download_chunk(response, channel_file, playlist_file, pbar)
 
 
 def download_video(video_details, path):
-    """Download videos."""
     for video in video_details:
         url = video_details[video]["video_url"]
         title = video_details[video]["video_title"]
         channel = video_details[video]["video_channel_title"]
-        channel_path = f"{path}/{channel}"
+        check_path(f"{path}/{channel}")
+        channel_path = f"{path}/{channel}/{title}.mp4"
         playlist = video_details[video]["playlist_name"]
-        playlist_path = f"{path}/{playlist}"
-
-        check_path(channel_path)
-
         if playlist:
-            check_path(playlist_path)
-            playlist_path = f"{playlist_path}/{title}.mp4"
-        else:
-            playlist_path = None
+            check_path(f"{path}/{playlist}")
+        playlist_path = f"{path}/{playlist}/{title}.mp4" if playlist else None
 
         stream = make_stream_obj(url)
 
-        download_with_progress(stream, f"{channel_path}/{title}.mp4", playlist_path)
+        args = (stream, channel_path, playlist_path, title)
+        download_video_with_progress(args)
+
+
+def get_time(start_time, end_time):
+    """Return the elapsed time between two times in minutes and seconds."""
+    total_time = end_time - start_time
+
+    elapsed_minutes = int(total_time // 60)
+    elapsed_seconds = int(total_time % 60)
+
+    return elapsed_minutes, elapsed_seconds
 
 
 def main():
@@ -244,15 +252,12 @@ def main():
 
     try:
         start_time = time.time()
+
         download_video(video_details, download_path)
+
         end_time = time.time()
 
-        total_time = end_time - start_time
-
-        # Convert total time to minutes and seconds
-        elapsed_minutes = int(total_time // 60)
-        elapsed_seconds = int(total_time % 60)
-
+        elapsed_minutes, elapsed_seconds = get_time(start_time, end_time)
         print("Download Completed!")
         print(f"Download time: {elapsed_minutes} minutes, {elapsed_seconds} seconds")
 
