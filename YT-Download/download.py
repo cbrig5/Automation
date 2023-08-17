@@ -18,8 +18,38 @@ import os
 import pickle
 
 import tkinter as tk
+from tkinter import ttk
+from ttkthemes import ThemedTk
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
+
+
+class CustomDialog:
+    def __init__(
+        self, parent, title, prompt, button_text, dialog_width, dialog_height, x, y
+    ):
+        self.result = None
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+
+        tk.Label(self.dialog, text=prompt).pack(pady=(10, 0))
+
+        self.entry = tk.Entry(self.dialog)
+        self.entry.pack()
+
+        button = tk.Button(self.dialog, text=button_text, command=self.get_result)
+        button.pack(pady=5)
+
+        # Adjust dialog size and position
+        x_position = parent.winfo_rootx() + (parent.winfo_width() - dialog_width) // x
+        y_position = parent.winfo_rooty() + (parent.winfo_height() - dialog_height) // y
+        self.dialog.geometry(
+            "{}x{}+{}+{}".format(dialog_width, dialog_height, x_position, y_position)
+        )
+
+    def get_result(self):
+        self.result = self.entry.get()
+        self.dialog.destroy()
 
 
 def youtube_authenticate():
@@ -271,14 +301,21 @@ def gui_download(video_details, download_path, root):
 
 def playlist_download_button(youtube, popup, root, user_id, download_path):
     popup.destroy()
-
     if user_id:
         channel_id = get_user_id(youtube)
     else:
-        channel_id = simpledialog.askstring("Input", "Enter the channel id:")
+        channel__id_dialog = CustomDialog(
+            root, "Input", "Enter the channel id:", "Enter", 300, 100, 2, 7
+        )
+        root.wait_window(channel__id_dialog.dialog)
+        channel_id = channel__id_dialog.result
 
     if channel_id:
-        playlist_name = simpledialog.askstring("Input", "Enter the playlist name:")
+        playlist_dialog = CustomDialog(
+            root, "Input", "Enter the playlist name:", "Download", 300, 100, 2, 7
+        )
+        root.wait_window(playlist_dialog.dialog)
+        playlist_name = playlist_dialog.result
         playlist_id = get_playlist_id(youtube, channel_id, playlist_name)
         videos = get_videos_from_playlist(youtube, playlist_id)
         video_details = get_video_details(videos, None, playlist_name)
@@ -286,34 +323,15 @@ def playlist_download_button(youtube, popup, root, user_id, download_path):
         gui_download(video_details, download_path, root)
 
 
-def on_single_url_button(youtube, video_url, popup, download_path, root):
+def single_download_button(youtube, root, download_path):
+    url_dialog = CustomDialog(root, "Input", "Enter video url:", 300, 100, 2, 7)
+    root.wait_window(url_dialog.dialog)
+    video_url = url_dialog.result
+
     if video_url:
         video = get_video_from_url(youtube, video_url)
         video_details = get_video_details(video, video_url, None)
-        popup.destroy()
         gui_download(video_details, download_path, root)
-    popup.destroy()
-
-
-def single_download_button(youtube, root, download_path):
-    popup = tk.Toplevel(root)
-    popup.title("Enter video url")
-
-    video_url_entry = Entry(popup)
-    video_url_entry.pack(padx=10, pady=15)
-    button = tk.Button(
-        popup,
-        text="Download",
-        command=lambda: on_single_url_button(
-            youtube, video_url_entry.get(), popup, download_path, root
-        ),
-    )
-    button.pack()
-
-    popup_width = 350
-    popup_height = 100
-
-    center_popup(root, popup, popup_width, popup_height)
 
 
 def show_playlist_popup(youtube, root, download_path):
@@ -361,7 +379,7 @@ def download_type_button(youtube, root, single):
 
 def gui(youtube):
     """GUI for the program."""
-    window = tk.Tk()
+    window = ThemedTK(them="yaru")
     window.title("YouTube Downloader")
     window.geometry("500x250")
 
