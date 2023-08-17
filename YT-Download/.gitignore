@@ -167,3 +167,6 @@ Downloads/
 
 # yotuube api credentials
 credentials.json
+
+# youtube api token
+token.pickle
