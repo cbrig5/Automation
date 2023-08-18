@@ -32,6 +32,7 @@ class CustomDialog:
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(title)
         self.dialog.configure(background="#61677A")
+        
 
         ttk.Label(self.dialog, text=prompt).pack(pady=(10, 0))
 
@@ -80,6 +81,34 @@ def youtube_authenticate():
 
     return build(api_service_name, api_version, credentials=creds)
 
+
+def button_with_style(root, title, font_size, padding_size, width, button_command):
+    style = ttk.Style()
+    style.configure(
+        "Large.TButton", font=("Helvetica", font_size), padding=padding_size
+    )
+    button_width = width
+
+    button = ttk.Button(
+        root,
+        text=title,
+        style="Large.TButton",
+        width=button_width,
+        command=button_command,
+    )
+    button.pack(pady=10)
+
+def label_with_style(root, font, font_size, label_text):
+    style = ttk.Style()
+    style.configure("Large.TLabel", font=(font, font_size))
+
+    label_frame = ttk.Frame(root)
+    label_frame.pack(pady=(10))
+
+    label = ttk.Label(
+        label_frame, text=label_text, style="Large.TLabel"
+    )
+    label.pack(pady=(10), padx=(15))
 
 def search(youtube, **kwargs):
     return youtube.search().list(part="snippet", **kwargs).execute()
@@ -313,7 +342,7 @@ def playlist_download_button(youtube, popup, root, user_id, download_path):
 
     if channel_id:
         playlist_dialog = CustomDialog(
-            root, "Input", "Enter the playlist name:", "Download", 300, 100, 2, 2
+            root, "Input", "Enter the playlist name:", "Download", 300, 100, 2, 3
         )
         root.wait_window(playlist_dialog.dialog)
         playlist_name = playlist_dialog.result
@@ -343,30 +372,33 @@ def show_playlist_popup(youtube, root, download_path):
     popup.title("Whose channel?")
 
     popup_width = 350
-    popup_height = 100
+    popup_height = 125
 
     x = 2
-    y = 2
+    y = 3
 
     center_popup(root, popup, popup_width, popup_height, x, y)
 
-    button1 = ttk.Button(
-        popup,
-        text="My channel",
-        command=lambda: playlist_download_button(
-            youtube, popup, root, True, download_path
-        ),
-    )
-    button1.pack(padx=10, pady=(10, 5))
+    font_size = 14
+    padding = 10
+    width = 15
 
-    button2 = ttk.Button(
+    button_with_style(
         popup,
-        text="Other channel",
-        command=lambda: playlist_download_button(
-            youtube, popup, root, False, download_path
-        ),
+        "My Channel",
+        font_size,
+        padding,
+        width,
+        lambda: playlist_download_button(youtube, popup, root, True, download_path),
     )
-    button2.pack(padx=10, pady=5)
+    button_with_style(
+        popup,
+        "Other Channel",
+        font_size,
+        padding,
+        width,
+        lambda: playlist_download_button(youtube, popup, root, False, download_path),
+    )
 
 
 def download_type_button(youtube, root, single):
@@ -389,39 +421,30 @@ def gui(youtube):
     window = ThemedTk(theme="black")
     window.title("YouTube Downloader")
     window.configure(background="#61677A")
-    window.geometry("500x250")
+    window.geometry("525x300")
 
-    style = ttk.Style()
-    style.configure("Large.TLabel", font=("Anson", 17))
+    label_with_style(window, "Anson", 17, "Welcome to my YouTube Downloader!")
 
-    label_frame = ttk.Frame(window)
-    label_frame.pack(pady=(10))
-
-    label = ttk.Label(
-        label_frame, text="Welcome to my YouTube Downloader!", style="Large.TLabel"
-    )
-    label.pack(pady=(10), padx=(15))
-
-    style.configure("Large.TButton", font=("Helvetica", 14), padding=10)
     button_width = 23
+    font_size = 14
+    padding = 10
 
-    single_button = ttk.Button(
+    button_with_style(
         window,
-        text="Download a single video",
-        style="Large.TButton",
-        width=button_width,
-        command=lambda: download_type_button(youtube, window, True),
+        "Download a single video",
+        font_size,
+        padding,
+        button_width,
+        lambda: download_type_button(youtube, window, True),
     )
-    single_button.pack(pady=10)
-
-    playlist_button = ttk.Button(
+    button_with_style(
         window,
-        text="Download a playlist",
-        style="Large.TButton",
-        width=button_width,
-        command=lambda: download_type_button(youtube, window, False),
+        "Download a playlist",
+        font_size,
+        padding,
+        button_width,
+        lambda: download_type_button(youtube, window, False),
     )
-    playlist_button.pack(pady=10)
 
     window.mainloop()
 
